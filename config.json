@@ -1,0 +1,158 @@
+{
+    "server_port":		          "8080",
+    "log_level":		          "CALL",
+
+    "amqp_url": "amqp://guest:guest@rabbitmq:5672/",
+    "amqp_consumer_name": "valuetypesearch",
+    "amqp_reconnect_timeout": 10,
+    "amqp_logging": "true",
+
+    "force_user": "false",
+    "force_auth": "false",
+
+    "elastic_url": "http://elastic:9200",
+    "elastic_retry": 3,
+    "create_index": "true",
+
+    "events": {
+        "processrating":[
+            {
+                "type": "child",
+                "target": "processrating",
+                "where": [{"target_feature": "id", "operation":"==", "event_feature":"id"}],
+                "features": [
+                    {"name": "command", "path": "$.command+", "temp":true},
+                    {"Name": "id", "Path": "$.id+", "temp":true},
+                    {"Name": "stars", "Path": "$.stars+"},
+                    {"Name": "rating", "Path": "$.rating+"}
+                ],
+                "if": [{"feature": "id", "operation": "!=", "value": ""}],
+                "actions": [
+                    {
+                        "type": "remove",
+                        "if": [{"feature": "command", "operation": "==", "value": "DELETE"}],
+                        "fields": ["rating"],
+                        "scale": "one"
+                    },
+                    {
+                        "type": "insert",
+                        "if": [{"feature": "command", "operation": "==", "value": "PUT"}],
+                        "fields": ["rating"],
+                        "scale": "one"
+                    }
+                ]
+            },
+            {
+                "type": "root",
+                "target": "prosessrating_rating_event",
+                "id_feature":"id",
+                "features": [
+                    {"name": "command", "path": "$.command+"},
+                    {"Name": "id", "Path": "$.id+"},
+                    {"Name": "stars", "Path": "$.stars+"},
+                    {"Name": "rating", "Path": "$.rating+"}
+                ],
+                "if": [{"feature": "id", "operation": "!=", "value": ""}],
+                "actions": [
+                    {
+                        "type": "insert",
+                        "fields": [""],
+                        "scale": "one"
+                    }
+                ]
+            }
+        ],
+        "processmodel":[
+            {
+                "type": "root",
+                "target": "processrating",
+                "id_feature":"id",
+                "features": [
+                    {"name": "command", "path": "$.command+", "temp":true},
+                    {"name": "id", "path": "$.id+"},
+                    {"Name": "name", "Path": "$.processmodel.process.definitions.process._id+"},
+                    {"Name": "date", "Path": "$.processmodel.date+"},
+                    {"Name": "svg", "Path": "$.processmodel.svg+"},
+                    {"Name": "publish", "Path": "$.processmodel.publish+"},
+                    {"Name": "parent_id", "Path": "$.processmodel.parent_id+"},
+                    {"Name": "description", "Path": "$.processmodel.description+"}
+                ],
+                "if": [{"feature": "id", "operation": "!=", "value": ""}],
+                "actions": [
+                    {
+                        "type": "remove_target",
+                        "if": [{"feature": "command", "operation": "==", "value": "DELETE"}]
+                    },
+                    {
+                        "type": "insert",
+                        "if": [{"feature": "command", "operation": "==", "value": "PUT"},{"feature": "publish", "operation": "==", "value": true}],
+                        "fields": [""],
+                        "scale": "one"
+                    },
+                    {
+                        "type": "remove_target",
+                        "if": [{"feature": "command", "operation": "==", "value": "PUT"},{"feature": "publish", "operation": "!=", "value": true}],
+                        "fields": [""],
+                        "scale": "one"
+                    }
+                ],
+                "init":[
+                    {
+                        "target":"prosessrating_rating_event",
+                        "where":[{"target_feature": "id", "operation":"==" , "event_feature":"id"}],
+                        "transform": [
+                            {"name": "command", "path": "$.command+", "temp":true},
+                            {"Name": "id", "Path": "$.id+", "temp":true},
+                            {"Name": "stars", "Path": "$.stars+"},
+                            {"Name": "rating", "Path": "$.rating+"}
+                        ],
+                        "actions": [
+                            {
+                                "type": "remove",
+                                "if": [{"feature": "command", "operation": "==", "value": "DELETE"}],
+                                "fields": ["rating"],
+                                "scale": "one"
+                            },
+                            {
+                                "type": "insert",
+                                "if": [{"feature": "command", "operation": "==", "value": "PUT"}],
+                                "fields": ["rating"],
+                                "scale": "one"
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    },
+
+    "queries": {
+        "processrating":{
+            "endpoint": {
+                "selection": {"condition": {"feature": "publish", "operation": "==", "value": true}},
+                "projection": ["*"]
+            }
+        }
+    },
+
+    "elastic_mapping": {
+        "processrating":{
+            "name":         {"type": "keyword", "copy_to": "feature_search"},
+            "date":         {"type": "date"},
+            "publish":      {"type": "boolean"},
+            "parent_id":    {"type": "keyword"},
+            "rating": {
+                "properties": {
+                    "rating": {"type": "integer"},
+                    "stars":  {"type": "float"}
+                }
+            }
+        },
+        "prosessrating_rating_event":{
+            "id":      {"type": "keyword"},
+            "command": {"type": "keyword"},
+            "rating": {"type": "integer"},
+            "stars":  {"type": "float"}
+        }
+    }
+}
